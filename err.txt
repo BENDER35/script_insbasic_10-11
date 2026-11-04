@@ -1,0 +1,6 @@
+En C:\Users\ROJO9263\Downloads\sc_basic_11\instalar_programas.ps1: 182 Carácter: 54
++ $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
++                                                      ~~
+Falta la cadena en el terminador: ".
+    + CategoryInfo          : ParserError: (:) [], ParseException
+    + FullyQualifiedErrorId : TerminatorExpectedAtEndOfString
