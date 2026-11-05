@@ -21,6 +21,8 @@ El script automatiza la descarga e instalación de las siguientes herramientas e
 | **AnyDesk** | WinGet (`AnyDeskSoftwareGmbH.AnyDesk`) | Escritorio remoto para soporte y acceso a distancia |
 | **RustDesk** | WinGet (`RustDesk.RustDesk`) | Escritorio remoto de código abierto, con opción de servidor propio |
 | **scrcpy** | WinGet (`Genymobile.scrcpy`) | Control y espejo de dispositivos Android por USB o Wi-Fi |
+| **Chocolatey** | Script oficial (`community.chocolatey.org`) | Gestor de paquetes para Windows a nivel de máquina |
+| **Scoop** | Script oficial (`get.scoop.sh`) | Gestor de paquetes portable orientado al usuario |
 | **aTube Catcher** | Descarga directa + InnoSetup | Descargador y convertidor multimedia |
 | **Microsoft Office LTSC 2024** | Microsoft ODT + XML (64-bit, ES) | Word, Excel, PowerPoint, Outlook (LTSC ProPlus Volumen) |
 
@@ -153,6 +155,43 @@ Se han añadido cinco aplicaciones al despliegue mediante WinGet:
 
 ---
 
+## 🍫 Gestores de Paquetes: Chocolatey y Scoop
+
+Además de WinGet, el script instala dos gestores de paquetes complementarios. Ambos se omiten si ya están presentes en el equipo.
+
+| Gestor | Instalación | Ámbito | Comando de uso |
+| :--- | :--- | :--- | :--- |
+| **Chocolatey** | Script oficial de `community.chocolatey.org` | Máquina (`C:\ProgramData\chocolatey`) | `choco install <paquete>` |
+| **Scoop** | Script oficial de `get.scoop.sh` | Usuario (`%USERPROFILE%\scoop`) | `scoop install <paquete>` |
+
+### Chocolatey
+
+- Requiere privilegios de Administrador (el script ya los tiene).
+- Se instala mediante el script oficial de la comunidad:
+
+```powershell
+$chocoInstallScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+Invoke-Expression $chocoInstallScript
+```
+
+- Detección: `Get-Command choco` o existencia de `C:\ProgramData\chocolatey\bin\choco.exe`.
+
+### Scoop
+
+- Instala herramientas portables en el perfil del usuario.
+- Como el script se ejecuta elevado, es necesario `-RunAsAdmin`:
+
+```powershell
+Invoke-Expression "& {$(Invoke-RestMethod -Uri 'https://get.scoop.sh')} -RunAsAdmin"
+```
+
+- Detección: `Get-Command scoop` o existencia de `%USERPROFILE%\scoop\shims\scoop.cmd`.
+- Al terminar, sus *shims* se añaden al PATH de la sesión actual.
+
+> **Resultado:** tras la primera ejecución, el equipo dispondrá de **tres gestores** complementarios: WinGet (paquetes del sistema), Chocolatey (instaladores tradicionales) y Scoop (herramientas portables).
+
+---
+
 ## ♻️ Omisión de programas ya instalados (Idempotencia)
 
 El script es **idempotente**: puede ejecutarse varias veces sobre el mismo equipo sin reinstalar lo que ya está presente. Antes de instalar cada aplicación comprueba su estado y, si ya existe, muestra un aviso y pasa a la siguiente:
@@ -169,6 +208,8 @@ El script es **idempotente**: puede ejecutarse varias veces sobre el mismo equip
 | **Microsoft Teams** | `Get-AppxPackage -Name MSTeams` (paquete MSIX) y, como respaldo, WinGet |
 | **aTube Catcher** | Búsqueda en el registro de Windows (`Uninstall`) por nombre |
 | **Microsoft Office LTSC 2024** | Clave `HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration` (`ProductReleaseIds`) |
+| **Chocolatey** | `Get-Command choco` o `C:\ProgramData\chocolatey\bin\choco.exe` |
+| **Scoop** | `Get-Command scoop` o `%USERPROFILE%\scoop\shims\scoop.cmd` |
 
 ### Funciones implicadas
 

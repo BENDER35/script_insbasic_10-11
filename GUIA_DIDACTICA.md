@@ -11,9 +11,10 @@ Esta guía didáctica explica en profundidad cómo funciona el sistema de despli
 3. [Análisis Paso a Paso del Script](#3-análisis-paso-a-paso-del-script)
    - [Fase 0: Elevación de Privilegios y Preparación de la Sesión](#fase-0-elevación-de-privilegios-y-preparación-de-la-sesión)
    - [Fase 1: Despliegue con Gestor de Paquetes Moderno (WinGet)](#fase-1-despliegue-con-gestor-de-paquetes-moderno-winget)
-   - [Fase 2: Instalación Silenciosa Tradicional (InnoSetup - aTube Catcher)](#fase-2-instalación-silenciosa-tradicional-innosetup---atube-catcher)
-   - [Fase 3: Despliegue Empresarial con XML (Microsoft Office LTSC 2024)](#fase-3-despliegue-empresarial-con-xml-microsoft-office-ltsc-2024)
-   - [Fase 4: Limpieza y Control de Flujo](#fase-4-limpieza-y-control-de-flujo)
+   - [Fase 2: Gestores de Paquetes Adicionales (Chocolatey y Scoop)](#fase-2-gestores-de-paquetes-adicionales-chocolatey-y-scoop)
+   - [Fase 3: Instalación Silenciosa Tradicional (InnoSetup - aTube Catcher)](#fase-3-instalación-silenciosa-tradicional-innosetup---atube-catcher)
+   - [Fase 4: Despliegue Empresarial con XML (Microsoft Office LTSC 2024)](#fase-4-despliegue-empresarial-con-xml-microsoft-office-ltsc-2024)
+   - [Fase 5: Limpieza y Control de Flujo](#fase-5-limpieza-y-control-de-flujo)
 4. [Anatomía del Error de `err.txt`: Por qué Ocurrió y Qué Aprendemos](#4-anatomía-del-error-de-errtxt-por-qué-ocurrió-y-qué-aprendemos)
 5. [Buenas Prácticas para Scripts en Entornos Windows](#5-buenas-prácticas-para-scripts-en-entornos-windows)
 
@@ -43,10 +44,11 @@ flowchart TD
     D --> E["instalar_programas.ps1: Configurar TLS y UTF-8"]
     E --> F["Detección robusta de winget.exe"]
     F --> G["Instalación de aplicaciones base (Chrome, 7-Zip, VLC, Adobe, Zoom, Teams, AnyDesk, RustDesk, scrcpy, etc.)"]
-    G --> H["Descarga e instalación silenciosa de aTube Catcher (InnoSetup)"]
-    H --> I["Descarga ODT + Generación configuration.xml + Setup Office 2024"]
-    I --> J["Limpieza de archivos temporales en %TEMP%"]
-    J --> K["Fin del proceso y pausa interactiva"]
+    G --> H["Instalación de gestores de paquetes: Chocolatey y Scoop"]
+    H --> I["Descarga e instalación silenciosa de aTube Catcher (InnoSetup)"]
+    I --> J["Descarga ODT + Generación configuration.xml + Setup Office 2024"]
+    J --> K["Limpieza de archivos temporales en %TEMP%"]
+    K --> L["Fin del proceso y pausa interactiva"]
 ```
 
 ---
@@ -227,7 +229,50 @@ Detalles importantes:
 
 ---
 
-### Fase 2: Instalación Silenciosa Tradicional (InnoSetup - aTube Catcher)
+### Fase 2: Gestores de Paquetes Adicionales (Chocolatey y Scoop)
+
+Además de WinGet, el script instala dos gestores de paquetes muy utilizados en Windows para ampliar las posibilidades de automatización posterior.
+
+#### Chocolatey
+
+Chocolatey es un gestor de paquetes clásico de Windows, orientado a instalaciones a nivel de máquina (MSI/EXE). Requiere privilegios de Administrador, que el script ya posee.
+
+- Se instala ejecutando el **script oficial** de la comunidad.
+- Ruta de instalación por defecto: `C:\ProgramData\chocolatey`.
+- Detección previa: `Get-Command choco` o existencia de `C:\ProgramData\chocolatey\bin\choco.exe`.
+
+```powershell
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$chocoInstallScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+Invoke-Expression $chocoInstallScript
+```
+
+#### Scoop
+
+Scoop es un gestor orientado al **usuario**, que instala herramientas portables en `%USERPROFILE%\scoop` y crea *shims* en el PATH.
+
+- Se instala con el script oficial `get.scoop.sh`.
+- Como el script se ejecuta con privilegios elevados, es imprescindible pasar `-RunAsAdmin`; de lo contrario, Scoop rechaza la instalación.
+- Detección previa: `Get-Command scoop` o existencia de `%USERPROFILE%\scoop\shims\scoop.cmd`.
+
+```powershell
+Invoke-Expression "& {$(Invoke-RestMethod -Uri 'https://get.scoop.sh')} -RunAsAdmin"
+```
+
+#### Idempotencia y diferencias entre ambos
+
+| Aspecto | Chocolatey | Scoop |
+| :--- | :--- | :--- |
+| Ámbito | Máquina (Administrador) | Usuario (`%USERPROFILE%\scoop`) |
+| Tipo de paquetes | MSI/EXE, instaladores tradicionales | Portables, ZIP, scripts |
+| Comando | `choco install <paquete>` | `scoop install <paquete>` |
+| Detección usada | `Get-Command choco` + ruta en `ProgramData` | `Get-Command scoop` + ruta en `%USERPROFILE%` |
+
+Ambos se **omiten si ya están instalados**, igual que el resto de programas del script. Al finalizar, el script añade `%USERPROFILE%\scoop\shims` al PATH de la sesión actual para que `scoop` esté disponible de inmediato.
+
+---
+
+### Fase 3: Instalación Silenciosa Tradicional (InnoSetup - aTube Catcher)
 
 Programas que no forman parte del catálogo oficial de WinGet se descargan directamente desde su servidor oficial y se ejecutan mediante sus respectivos parámetros de instalación desatendida.
 
@@ -267,7 +312,7 @@ Start-Process -FilePath $aTubeInstaller -ArgumentList "/VERYSILENT /SUPPRESSMSGB
 
 ---
 
-### Fase 3: Despliegue Empresarial con XML (Microsoft Office LTSC 2024)
+### Fase 4: Despliegue Empresarial con XML (Microsoft Office LTSC 2024)
 
 Microsoft Office no se distribuye mediante un único instalador `.exe` estándar. Microsoft utiliza la **Office Deployment Tool (ODT)** (*setup.exe*) y un archivo de configuración en formato XML.
 
@@ -312,7 +357,7 @@ Office Click-to-Run registra en `ProductReleaseIds` los productos instalados. Si
 
 ---
 
-### Fase 4: Limpieza y Control de Flujo
+### Fase 5: Limpieza y Control de Flujo
 
 Al terminar la instalación, el script limpia el directorio temporal en `$env:TEMP\InstaladorDesatendido` para liberar espacio en el disco duro:
 ```powershell
@@ -394,6 +439,9 @@ Aunque el origen real del error estaba en el *here-string*, la línea que PowerS
 
 ### Ampliación del catálogo: Zoom, Teams, AnyDesk, RustDesk y scrcpy
 La versión actual añade **Zoom** (`Zoom.Zoom`), **Microsoft Teams** (`Microsoft.Teams`), **AnyDesk** (`AnyDeskSoftwareGmbH.AnyDesk`), **RustDesk** (`RustDesk.RustDesk`) y **scrcpy** (`Genymobile.scrcpy`) al bloque de WinGet. Todos se instalan dentro del mismo bucle `foreach`, por lo que heredan automáticamente la detección de software ya instalado, el manejo de códigos de retorno y los acuerdos de licencia ya explicados en la Fase 1.
+
+### Gestores de paquetes adicionales: Chocolatey y Scoop
+También se incorporan **Chocolatey** y **Scoop** como herramientas de segundo nivel. No se instalan mediante WinGet, sino con sus respectivos scripts oficiales, y cuentan con detección propia para evitar reinstalaciones. Esto permite que, tras ejecutar el instalador una primera vez, el equipo disponga de tres gestores complementarios: WinGet (sistema), Chocolatey (máquina) y Scoop (usuario).
 
 ---
 

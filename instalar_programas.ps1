@@ -13,8 +13,10 @@
       9. AnyDesk
      10. RustDesk
      11. scrcpy
-     12. aTube Catcher
-     13. Microsoft Office LTSC 2024 (Español, 64 bits)
+     12. Chocolatey (gestor de paquetes)
+     13. Scoop (gestor de paquetes)
+     14. aTube Catcher
+     15. Microsoft Office LTSC 2024 (Español, 64 bits)
 
 .NOTES
     Requiere ejecución con privilegios de Administrador y conexión a Internet.
@@ -216,7 +218,69 @@ if ($wingetCmd) {
 }
 
 # ==========================================
-# 2. Instalación desatendida de aTube Catcher
+# 2. Instalación de gestores de paquetes: Chocolatey y Scoop
+# ==========================================
+Write-Host ""
+Write-Host "[+] Comprobando gestores de paquetes adicionales (Chocolatey y Scoop)..." -ForegroundColor Green
+
+# --- Chocolatey ---
+$chocoExe = $null
+$chocoCmd = Get-Command "choco" -ErrorAction SilentlyContinue
+if ($chocoCmd) {
+    $chocoExe = $chocoCmd.Source
+} elseif (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe") {
+    $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
+}
+
+if ($chocoExe) {
+    Write-Host "    [=] Chocolatey ya está instalado. Se omite." -ForegroundColor DarkGray
+} else {
+    Write-Host "    -> Instalando Chocolatey..." -ForegroundColor White
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $chocoInstallScript = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+        Invoke-Expression $chocoInstallScript
+
+        if (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe") {
+            Write-Host "       [OK] Chocolatey instalado correctamente." -ForegroundColor Green
+        } else {
+            Write-Host "       [!] No se pudo verificar la instalación de Chocolatey." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "       [!] Error al instalar Chocolatey: $_" -ForegroundColor Red
+    }
+}
+
+# --- Scoop ---
+$scoopAvailable = (Get-Command "scoop" -ErrorAction SilentlyContinue) -or `
+                  (Test-Path "$env:USERPROFILE\scoop\shims\scoop.cmd") -or `
+                  (Test-Path "$env:USERPROFILE\scoop\shims\scoop.ps1")
+
+if ($scoopAvailable) {
+    Write-Host "    [=] Scoop ya está instalado. Se omite." -ForegroundColor DarkGray
+} else {
+    Write-Host "    -> Instalando Scoop..." -ForegroundColor White
+    try {
+        # -RunAsAdmin es necesario porque este script se ejecuta con privilegios elevados.
+        Invoke-Expression "& {$(Invoke-RestMethod -Uri 'https://get.scoop.sh')} -RunAsAdmin"
+
+        if ((Test-Path "$env:USERPROFILE\scoop\shims\scoop.cmd") -or (Test-Path "$env:USERPROFILE\scoop\shims\scoop.ps1")) {
+            Write-Host "       [OK] Scoop instalado correctamente." -ForegroundColor Green
+        } else {
+            Write-Host "       [!] No se pudo verificar la instalación de Scoop." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "       [!] Error al instalar Scoop: $_" -ForegroundColor Red
+    }
+}
+
+# Añadir los shims de Scoop al PATH de esta sesión si existen
+if (Test-Path "$env:USERPROFILE\scoop\shims") {
+    $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+}
+
+# ==========================================
+# 3. Instalación desatendida de aTube Catcher
 # ==========================================
 Write-Host ""
 if (Test-SoftwareInstalled -NamePattern 'aTube\s*Catcher') {
@@ -261,7 +325,7 @@ if (Test-SoftwareInstalled -NamePattern 'aTube\s*Catcher') {
 }
 
 # ==========================================
-# 3. Instalación desatendida de Microsoft Office 2024
+# 4. Instalación desatendida de Microsoft Office 2024
 # ==========================================
 Write-Host ""
 if (Test-Office2024Installed) {
@@ -323,7 +387,7 @@ if (Test-Office2024Installed) {
 }
 
 # ==========================================
-# 4. Limpieza de archivos temporales
+# 5. Limpieza de archivos temporales
 # ==========================================
 Write-Host ""
 Write-Host "[+] Limpiando archivos temporales..." -ForegroundColor Green
