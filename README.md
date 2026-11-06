@@ -87,6 +87,7 @@ Set-ExecutionPolicy -Scope CurrentUser  -ExecutionPolicy Undefined -Force
 - **[`ejecutar_instalador.bat`](ejecutar_instalador.bat)**: Lanzador por lotes que comprueba permisos de administrador, eleva privilegios y lanza PowerShell con `ExecutionPolicy Bypass`.
 - **[`instalar_programas.ps1`](instalar_programas.ps1)**: Script principal en PowerShell encargado de gestionar paquetes WinGet, descargas web, configuración XML e instalación de Office.
 - **[`GUIA_DIDACTICA.md`](GUIA_DIDACTICA.md)**: Manual técnico y didáctico que explica detalladamente el funcionamiento interno del script, sintaxis de PowerShell, gestión de instaladores silenciosos y resolución de errores.
+- **[`.github/workflows/mirror-to-gitlab.yml`](.github/workflows/mirror-to-gitlab.yml)**: Workflow de GitHub Actions que replica automáticamente el repositorio en GitLab.
 
 ---
 
@@ -218,3 +219,43 @@ El script es **idempotente**: puede ejecutarse varias veces sobre el mismo equip
 - `Test-Office2024Installed`: verifica si Office 2024 ProPlus Volume está desplegado con Click-to-Run.
 
 > **Ventaja:** además de ahorrar tiempo, se evita descargar de nuevo Office o los instaladores externos, y se reduce el riesgo de errores por reinstalar sobre una versión en uso.
+
+---
+
+## 🔁 Mirror Automático GitHub → GitLab
+
+El repositorio se replica automáticamente en GitLab mediante **GitHub Actions**:
+
+- **Origen (principal):** https://github.com/BENDER35/script_insbasic_10-11
+- **Espejo:** https://gitlab.com/BENDER_5000/script_insbasic_10-11
+
+Cada `push` de ramas o tags, cada borrado de rama/tag y una ejecución programada cada 6 horas sincronizan **todas las ramas y tags** desde GitHub hacia GitLab. El espejo es **unidireccional** a propósito, para evitar bucles y divergencias: GitHub es la fuente de verdad y GitLab la copia de seguridad.
+
+### Cómo funciona
+
+1. El workflow `.github/workflows/mirror-to-gitlab.yml` se ejecuta en cada evento.
+2. Configura una clave SSH de despliegue (guardada como secreto `GITLAB_MIRROR_KEY`) y valida la huella de `gitlab.com`.
+3. Clona el repositorio de GitHub y hace `git push --prune` de `refs/heads/*` y `refs/tags/*` al remoto de GitLab.
+4. Las ramas o tags eliminados en GitHub también se eliminan en GitLab.
+
+### Verificación manual
+
+```bash
+# SHA de GitHub
+gh api repos/BENDER35/script_insbasic_10-11/commits/main --jq .sha
+
+# SHA del espejo en GitLab
+glab api projects/88547555/repository/commits/main | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])"
+
+# Estado de la última ejecución
+gh run list --workflow=mirror-to-gitlab.yml --limit 5
+```
+
+Si ambos SHA coinciden, el espejo está sincronizado.
+
+### Mantenimiento
+
+- La clave de despliegue se gestiona en **GitLab → Settings → Repository → Deploy keys** (con permiso de escritura).
+- El secreto se gestiona en **GitHub → Settings → Secrets and variables → Actions → `GITLAB_MIRROR_KEY`**.
+- Para forzar una sincronización inmediata: **Actions → Mirror to GitLab → Run workflow**.
+- Si el namespace de GitLab cambia, actualiza `GITLAB_URL` en el workflow.

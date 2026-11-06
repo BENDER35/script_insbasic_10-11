@@ -1,0 +1,60 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "**"
+  delete:
+  schedule:
+    # Reintento periódico por si alguna ejecución falla o se pierde un evento.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-to-gitlab
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    name: GitHub -> GitLab
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure SSH for GitLab
+        env:
+          GITLAB_MIRROR_KEY: ${{ secrets.GITLAB_MIRROR_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$GITLAB_MIRROR_KEY" > "$HOME/.ssh/gitlab_mirror"
+          chmod 600 "$HOME/.ssh/gitlab_mirror"
+          ssh-keyscan -t rsa,ecdsa,ed25519 gitlab.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
+          {
+            echo "Host gitlab.com"
+            echo "  HostName gitlab.com"
+            echo "  User git"
+            echo "  IdentityFile ~/.ssh/gitlab_mirror"
+            echo "  IdentitiesOnly yes"
+          } > "$HOME/.ssh/config"
+          ssh -o BatchMode=yes -T git@gitlab.com || true
+
+      - name: Clone GitHub and push to GitLab
+        env:
+          GITLAB_URL: git@gitlab.com:BENDER_5000/script_insbasic_10-11.git
+        run: |
+          set -euo pipefail
+          git init --bare mirror.git
+          cd mirror.git
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git config remote.origin.fetch '+refs/heads/*:refs/heads/*'
+          git config --add remote.origin.fetch '+refs/tags/*:refs/tags/*'
+          git fetch --prune origin
+          git remote add gitlab "$GITLAB_URL"
+          git push --prune gitlab '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+          echo "GitHub main: $(git rev-parse refs/heads/main)"
+          echo "Refs mirrored: $(git for-each-ref --format='%(refname)' refs/heads refs/tags | wc -l)"
