@@ -55,6 +55,32 @@ jobs:
           git config --add remote.origin.fetch '+refs/tags/*:refs/tags/*'
           git fetch --prune origin
           git remote add gitlab "$GITLAB_URL"
-          git push --prune gitlab '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
-          echo "GitHub main: $(git rev-parse refs/heads/main)"
-          echo "Refs mirrored: $(git for-each-ref --format='%(refname)' refs/heads refs/tags | wc -l)"
+
+          # Reintentos con espera creciente: absorbe rechazos transitorios del
+          # pre-receive hook de GitLab (por ejemplo, tras rotar la deploy key).
+          for attempt in 1 2 3 4 5; do
+            if git push --atomic --prune gitlab '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'; then
+              echo "Push a GitLab correcto (intento $attempt)."
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "ERROR: el push a GitLab falló tras $attempt intentos." >&2
+              exit 1
+            fi
+            delay=$((attempt * 15))
+            echo "Push rechazado (intento $attempt). Reintentando en ${delay}s..." >&2
+            sleep "$delay"
+          done
+
+          # Verificación: el SHA de main debe coincidir en ambos remotos.
+          local_sha="$(git rev-parse refs/heads/main)"
+          remote_sha="$(git ls-remote gitlab refs/heads/main | cut -f1)"
+          echo "GitHub main: $local_sha"
+          echo "GitLab main: $remote_sha"
+          echo "Refs verificados: $(git for-each-ref --format='%(refname)' refs/heads refs/tags | tr '\n' ' ')"
+
+          if [ "$local_sha" != "$remote_sha" ]; then
+            echo "ERROR: el SHA de main no coincide entre GitHub y GitLab." >&2
+            exit 1
+          fi
+          echo "Verificación correcta: el espejo está sincronizado."
